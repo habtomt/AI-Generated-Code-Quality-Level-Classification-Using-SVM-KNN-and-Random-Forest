@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Code Quality Classifier</title>
+
+  <!-- =====================================================================
+       PHASE 8: FRONTEND UI  (v2 — All-Models Comparison)
+       File     : ui/index.html
+
+       Default action: POST /predict/all  → compare SVM / kNN / Random Forest
+       Output:
+         • Model comparison table (Model | Prediction | Confidence | Prob bars)
+         • Final Decision card   (label + reason + agreement badge)
+         • Extracted features grid
+         • Raw JSON toggle
+  ====================================================================== -->
+
+  <style>
+    /* ── Variables & reset ────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0d0f1a;
+      --surface:     #13162200;
+      --surface-s:   #161929;
+      --card:        #1a1e30;
+      --border:      #262b40;
+      --border-h:    #353c58;
+      --text:        #e2e6f3;
+      --muted:       #6b7394;
+      --accent:      #6366f1;
+      --accent-h:    #4f46e5;
+      --accent-glow: rgba(99,102,241,0.18);
+
+      --good:        #22c55e;
+      --good-bg:     rgba(34,197,94,.12);
+      --mod:         #f59e0b;
+      --mod-bg:      rgba(245,158,11,.12);
+      --bad:         #ef4444;
+      --bad-bg:      rgba(239,68,68,.12);
+
+      --full-agree:  #22c55e;
+      --part-agree:  #f59e0b;
+      --split:       #ef4444;
+
+      --radius:      12px;
+      --radius-s:    8px;
+      --font:        'Inter', system-ui, -apple-system, sans-serif;
+      --mono:        'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background:  var(--bg);
+      color:       var(--text);
+      font-family: var(--font);
+      font-size:   15px;
+      line-height: 1.6;
+      min-height:  100vh;
+      padding:     2.5rem 1.25rem 4rem;
+    }
+
+    /* ── Layout ───────────────────────────────────────────────────────── */
+    .wrap { max-width: 1000px; margin: 0 auto; }
+
+    /* ── Header ───────────────────────────────────────────────────────── */
+    header { text-align: center; margin-bottom: 2.8rem; }
+
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: .6rem;
+      background: var(--accent-glow);
+      border: 1px solid rgba(99,102,241,.3);
+      border-radius: 99px;
+      padding: .35rem 1.1rem .35rem .7rem;
+      font-size: .82rem;
+      font-weight: 600;
+      color: #a5b4fc;
+      margin-bottom: 1.1rem;
+      letter-spacing: .4px;
+    }
+    .logo-dot {
+      width: 8px; height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: .5; transform: scale(.7); }
+    }
+
+    header h1 {
+      font-size: clamp(1.8rem, 4vw, 2.6rem);
+      font-weight: 800;
+      letter-spacing: -1px;
+      line-height: 1.15;
+    }
+    header h1 em { font-style: normal; color: var(--accent); }
+    header p {
+      color: var(--muted);
+      margin-top: .55rem;
+      font-size: .92rem;
+    }
+
+    /* ── Card ─────────────────────────────────────────────────────────── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.6rem;
+      margin-bottom: 1.4rem;
+    }
+    .card-title {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      font-size: .78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin-bottom: 1.1rem;
+    }
+    .card-title .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+
+    /* ── Textarea ─────────────────────────────────────────────────────── */
+    textarea {
+      width: 100%;
+      min-height: 260px;
+      background: #0d0f1a;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-s);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: .84rem;
+      line-height: 1.65;
+      padding: 1rem 1.1rem;
+      resize: vertical;
+      outline: none;
+      transition: border-color .2s;
+      tab-size: 4;
+    }
+    textarea:focus { border-color: var(--accent); }
+    textarea::placeholder { color: var(--muted); opacity: .6; }
+
+    /* ── Controls row ─────────────────────────────────────────────────── */
+    .ctrl-row {
+      display: flex;
+      align-items: center;
+      gap: .8rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .file-label {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-s);
+      padding: .5rem 1rem;
+      font-size: .85rem;
+      color: var(--muted);
+      cursor: pointer;
+      transition: border-color .2s, color .2s;
+    }
+    .file-label:hover { border-color: var(--border-h); color: var(--text); }
+    #file-upload { display: none; }
+
+    .spacer { flex: 1; }
+
+    .btn-ghost {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-s);
+      padding: .5rem 1rem;
+      font-size: .85rem;
+      color: var(--muted);
+      cursor: pointer;
+      transition: border-color .2s, color .2s;
+    }
+    .btn-ghost:hover { border-color: var(--border-h); color: var(--text); }
+
+    /* ── Primary CTA button ───────────────────────────────────────────── */
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: .55rem;
+      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-s);
+      padding: .65rem 1.8rem;
+      font-size: .95rem;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: .2px;
+      box-shadow: 0 4px 20px rgba(99,102,241,.35);
+      transition: opacity .2s, transform .15s;
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-primary::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,0);
+      transition: background .15s;
+    }
+    .btn-primary:hover::after  { background: rgba(255,255,255,.07); }
+    .btn-primary:active        { transform: scale(.97); }
+    .btn-primary:disabled      { opacity: .45; cursor: not-allowed; transform: none; }
+
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2.5px solid rgba(255,255,255,.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .65s linear infinite;
+      display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Error / warning banners ──────────────────────────────────────── */
+    .banner {
+      display: none;
+      border-radius: var(--radius-s);
+      padding: .75rem 1.1rem;
+      font-size: .88rem;
+      margin-bottom: 1.2rem;
+    }
+    .banner-error {
+      background: rgba(239,68,68,.08);
+      border: 1px solid rgba(239,68,68,.35);
+      color: #fca5a5;
+    }
+    .banner-warn {
+      background: rgba(245,158,11,.08);
+      border: 1px solid rgba(245,158,11,.35);
+      color: #fde68a;
+    }
+
+    /* ── Results section ──────────────────────────────────────────────── */
+    #result { display: none; }
+
+    /* ── Model comparison table ───────────────────────────────────────── */
+    .cmp-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .cmp-table th {
+      text-align: left;
+      font-size: .75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .9px;
+      color: var(--muted);
+      padding: .5rem .8rem .75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .cmp-table td {
+      padding: .9rem .8rem;
+      vertical-align: middle;
+      border-bottom: 1px solid rgba(38,43,64,.6);
+      font-size: .92rem;
+    }
+    .cmp-table tr:last-child td { border-bottom: none; }
+    .cmp-table tr { transition: background .15s; }
+    .cmp-table tr:hover td { background: rgba(255,255,255,.025); }
+
+    /* model name cell */
+    .model-cell {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      font-weight: 600;
+    }
+    .model-icon {
+      width: 30px; height: 30px;
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .8rem;
+      flex-shrink: 0;
+    }
+    .icon-svm { background: rgba(139,92,246,.18); color: #a78bfa; }
+    .icon-knn { background: rgba(20,184,166,.18);  color: #5eead4; }
+    .icon-rf  { background: rgba(249,115,22,.18);  color: #fb923c; }
+
+    /* prediction badge */
+    .pred-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      font-weight: 700;
+      font-size: .88rem;
+      padding: .3rem .85rem;
+      border-radius: 99px;
+    }
+    .pred-badge::before {
+      content: '';
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .pred-Good     { background: var(--good-bg); color: var(--good);
+                     .pred-badge::before { background: var(--good); } }
+    .pred-Moderate { background: var(--mod-bg);  color: var(--mod); }
+    .pred-Bad      { background: var(--bad-bg);  color: var(--bad); }
+
+    .pred-dot-Good     { background: var(--good); }
+    .pred-dot-Moderate { background: var(--mod); }
+    .pred-dot-Bad      { background: var(--bad); }
+
+    /* confidence cell */
+    .conf-cell { min-width: 160px; }
+    .conf-row {
+      display: flex;
+      align-items: center;
+      gap: .7rem;
+    }
+    .conf-track {
+      flex: 1;
+      height: 6px;
+      background: var(--border);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .conf-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width .5s cubic-bezier(.4,0,.2,1);
+    }
+    .conf-num {
+      font-size: .88rem;
+      font-weight: 700;
+      min-width: 40px;
+      text-align: right;
+    }
+
+    /* prob mini-bars cell */
+    .prob-mini { display: flex; flex-direction: column; gap: 3px; min-width: 130px; }
+    .prob-mini-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: .75rem;
+    }
+    .prob-mini-label { width: 56px; color: var(--muted); }
+    .prob-mini-track {
+      flex: 1;
+      height: 4px;
+      background: var(--border);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .prob-mini-fill { height: 100%; border-radius: 99px; }
+    .prob-mini-val  { width: 34px; text-align: right; color: var(--muted); font-size: .72rem; }
+
+    /* ── Winner indicator in table ────────────────────────────────────── */
+    .crown { font-size: .8rem; margin-left: .3rem; opacity: .8; }
+
+    /* ── Final Decision card ──────────────────────────────────────────── */
+    .final-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 1.4rem;
+    }
+
+    .final-header {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+    }
+
+    .final-accent-bar {
+      width: 5px;
+      flex-shrink: 0;
+    }
+
+    .final-body {
+      flex: 1;
+      padding: 1.5rem 1.6rem;
+    }
+
+    .final-label-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .final-label-text {
+      font-size: .75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin-bottom: .4rem;
+    }
+
+    .verdict-badge {
+      font-size: 2rem;
+      font-weight: 900;
+      letter-spacing: .5px;
+      padding: .25rem .9rem;
+      border-radius: var(--radius-s);
+    }
+    .verdict-Good     { background: var(--good-bg); color: var(--good); }
+    .verdict-Moderate { background: var(--mod-bg);  color: var(--mod); }
+    .verdict-Bad      { background: var(--bad-bg);  color: var(--bad); }
+
+    .agreement-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      font-size: .78rem;
+      font-weight: 600;
+      padding: .3rem .85rem;
+      border-radius: 99px;
+      letter-spacing: .3px;
+    }
+    .agree-full    { background: rgba(34,197,94,.12);  color: var(--full-agree); border: 1px solid rgba(34,197,94,.25); }
+    .agree-partial { background: rgba(245,158,11,.12); color: var(--part-agree); border: 1px solid rgba(245,158,11,.25); }
+    .agree-split   { background: rgba(239,68,68,.12);  color: var(--bad);        border: 1px solid rgba(239,68,68,.25); }
+
+    .vote-pills {
+      display: flex;
+      gap: .5rem;
+      margin-top: .8rem;
+      flex-wrap: wrap;
+    }
+    .vote-pill {
+      font-size: .78rem;
+      font-weight: 600;
+      padding: .25rem .75rem;
+      border-radius: 99px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .final-reason {
+      margin-top: .9rem;
+      padding-top: .9rem;
+      border-top: 1px solid var(--border);
+      font-size: .85rem;
+      color: var(--muted);
+      display: flex;
+      align-items: flex-start;
+      gap: .5rem;
+    }
+    .final-reason strong { color: var(--text); }
+
+    /* ── Feature grid ─────────────────────────────────────────────────── */
+    .feat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: .55rem;
+    }
+    .feat-item {
+      background: #0d0f1a;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-s);
+      padding: .6rem .9rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: .84rem;
+      transition: border-color .15s;
+    }
+    .feat-item:hover { border-color: var(--border-h); }
+    .feat-name { color: var(--muted); }
+    .feat-val  { font-weight: 700; color: var(--text); font-family: var(--mono); font-size: .82rem; }
+
+    /* ── Raw JSON ─────────────────────────────────────────────────────── */
+    #raw-json {
+      display: none;
+      background: #090b12;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-s);
+      padding: 1rem 1.1rem;
+      font-family: var(--mono);
+      font-size: .78rem;
+      color: #7dd3fc;
+      white-space: pre;
+      overflow-x: auto;
+      max-height: 320px;
+      overflow-y: auto;
+      margin-top: .8rem;
+    }
+
+    /* ── Section divider ──────────────────────────────────────────────── */
+    .section-label {
+      font-size: .73rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin-bottom: .8rem;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+    .section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── Footer ───────────────────────────────────────────────────────── */
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: .78rem;
+      margin-top: 3rem;
+      opacity: .6;
+    }
+
+    /* ── Responsive ───────────────────────────────────────────────────── */
+    @media (max-width: 680px) {
+      .cmp-table th:nth-child(4),
+      .cmp-table td:nth-child(4) { display: none; }
+      .ctrl-row { flex-direction: column; align-items: stretch; }
+      .btn-primary { justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <span class="logo-dot"></span>
+      Pattern Recognition System
+    </div>
+    <h1>Code Quality <em>Classifier</em></h1>
+    <p>Static structural analysis · SVM · kNN · Random Forest · Majority Vote</p>
+  </header>
+
+  <!-- Input card -->
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>Python Source Code</div>
+    <textarea id="code-input" spellcheck="false"
+      placeholder="# Paste your Python code here …
+
+def fibonacci(n):
+    if n <= 1:
+        return n
+    return fibonacci(n - 1) + fibonacci(n - 2)
+"></textarea>
+
+    <div class="ctrl-row">
+      <label class="file-label" for="file-upload">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        Upload .py file
+      </label>
+      <input type="file" id="file-upload" accept=".py" />
+      <div class="spacer"></div>
+      <button class="btn-ghost" id="clear-btn">✕ Clear</button>
+      <button class="btn-primary" id="predict-btn">
+        <svg id="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        <span class="spinner" id="btn-spinner"></span>
+        <span id="btn-text">Analyse (All Models)</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Error / parse-warning banners -->
+  <div id="error-msg"  class="banner banner-error"></div>
+  <div id="parse-warn" class="banner banner-warn">
+    ⚠ The submitted code contained syntax errors. Feature extraction may be incomplete.
+  </div>
+
+  <!-- ── RESULTS ────────────────────────────────────────────────────── -->
+  <div id="result">
+
+    <!-- Model comparison table -->
+    <div class="card" style="padding: 1.6rem 1.6rem 1rem;">
+      <div class="card-title"><span class="dot"></span>Model Comparison</div>
+
+      <table class="cmp-table">
+        <thead>
+          <tr>
+            <th>Model</th>
+            <th>Prediction</th>
+            <th>Confidence</th>
+            <th>Class Probabilities</th>
+          </tr>
+        </thead>
+        <tbody id="cmp-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- Final Decision -->
+    <div class="final-card" id="final-card">
+      <div class="final-header">
+        <div class="final-accent-bar" id="final-accent-bar"></div>
+        <div class="final-body">
+
+          <div class="final-label-text">Final Decision</div>
+          <div class="final-label-row">
+            <div id="final-badge" class="verdict-badge">—</div>
+            <div id="agreement-badge" class="agreement-badge">—</div>
+          </div>
+
+          <div class="vote-pills" id="vote-pills"></div>
+
+          <div class="final-reason">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" style="flex-shrink:0;margin-top:1px;">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+            <span id="final-reason">—</span>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Extracted features -->
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>Extracted Static Features</div>
+      <div class="feat-grid" id="feat-grid"></div>
+    </div>
+
+    <!-- Raw JSON -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="card-title" style="margin-bottom:0;"><span class="dot"></span>Raw API Response</div>
+        <button class="btn-ghost" id="toggle-json" style="font-size:.8rem; padding:.35rem .85rem;">
+          Show JSON
+        </button>
+      </div>
+      <pre id="raw-json"></pre>
+    </div>
+
+  </div><!-- /#result -->
+
+  <footer>Quality Classification System &nbsp;·&nbsp; FastAPI + scikit-learn</footer>
+</div><!-- /.wrap -->
+
+<!-- =================================================================
+     JavaScript
+================================================================= -->
+<script>
+"use strict";
+
+const API_BASE = "";   // same origin; set to "http://localhost:8000" for standalone
+
+const FEATURE_LABELS = {
+  loc:               "Lines of Code",
+  sloc:              "Source LOC",
+  cyclomatic_avg:    "Cyclomatic Avg",
+  cyclomatic_max:    "Cyclomatic Max",
+  function_count:    "Functions",
+  class_count:       "Classes",
+  nesting_depth_max: "Max Nesting",
+  nesting_depth_avg: "Avg Nesting",
+  comment_ratio:     "Comment Ratio",
+  avg_var_name_len:  "Avg Var Length",
+  unique_var_count:  "Unique Vars",
+  halstead_vocab:    "Halstead Vocab",
+};
+
+const COLOR = {
+  Good:     "#22c55e",
+  Moderate: "#f59e0b",
+  Bad:      "#ef4444",
+};
+
+const MODEL_ICONS = {
+  "SVM":           { cls: "icon-svm", label: "SV" },
+  "kNN":           { cls: "icon-knn", label: "kN" },
+  "Random Forest": { cls: "icon-rf",  label: "RF" },
+};
+
+// ── DOM refs ──────────────────────────────────────────────────────────
+const codeInput    = document.getElementById("code-input");
+const fileUpload   = document.getElementById("file-upload");
+const predictBtn   = document.getElementById("predict-btn");
+const clearBtn     = document.getElementById("clear-btn");
+const btnText      = document.getElementById("btn-text");
+const btnSpinner   = document.getElementById("btn-spinner");
+const btnIcon      = document.getElementById("btn-icon");
+const errorMsg     = document.getElementById("error-msg");
+const parseWarn    = document.getElementById("parse-warn");
+const resultDiv    = document.getElementById("result");
+const cmpTbody     = document.getElementById("cmp-tbody");
+const finalCard    = document.getElementById("final-card");
+const finalBadge   = document.getElementById("final-badge");
+const finalAccent  = document.getElementById("final-accent-bar");
+const agreeEl      = document.getElementById("agreement-badge");
+const votePillsEl  = document.getElementById("vote-pills");
+const finalReasonEl= document.getElementById("final-reason");
+const featGrid     = document.getElementById("feat-grid");
+const rawJson      = document.getElementById("raw-json");
+const toggleJson   = document.getElementById("toggle-json");
+
+// ── File upload ───────────────────────────────────────────────────────
+fileUpload.addEventListener("change", () => {
+  const file = fileUpload.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => { codeInput.value = e.target.result; };
+  reader.readAsText(file);
+});
+
+// ── Clear ─────────────────────────────────────────────────────────────
+clearBtn.addEventListener("click", () => {
+  codeInput.value = "";
+  fileUpload.value = "";
+  resultDiv.style.display = "none";
+  hideError();
+  parseWarn.style.display = "none";
+});
+
+// ── Toggle JSON ───────────────────────────────────────────────────────
+toggleJson.addEventListener("click", () => {
+  const shown = rawJson.style.display !== "none";
+  rawJson.style.display   = shown ? "none" : "block";
+  toggleJson.textContent  = shown ? "Show JSON" : "Hide JSON";
+});
+
+// ── Analyse ───────────────────────────────────────────────────────────
+predictBtn.addEventListener("click", async () => {
+  const code = codeInput.value.trim();
+  if (!code) {
+    showError("Please paste or upload Python code before analysing.");
+    return;
+  }
+
+  setLoading(true);
+  hideError();
+  parseWarn.style.display = "none";
+  resultDiv.style.display = "none";
+
+  try {
+    const res = await fetch(`${API_BASE}/predict/all`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ code }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showError(data.detail || `Server error ${res.status}`);
+      return;
+    }
+    renderAll(data);
+
+  } catch (err) {
+    showError(`Network error: ${err.message} — is the API running?`);
+  } finally {
+    setLoading(false);
+  }
+});
+
+// ── Render full result ────────────────────────────────────────────────
+function renderAll(data) {
+  // parse warning
+  if (data.parse_error) parseWarn.style.display = "block";
+
+  renderComparisonTable(data.results, data.final_decision);
+  renderFinalDecision(data.final_decision);
+  renderFeatures(data.features);
+
+  rawJson.textContent    = JSON.stringify(data, null, 2);
+  rawJson.style.display  = "none";
+  toggleJson.textContent = "Show JSON";
+
+  resultDiv.style.display = "block";
+  setTimeout(() => resultDiv.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+}
+
+// ── Comparison table ──────────────────────────────────────────────────
+function renderComparisonTable(results, finalDecision) {
+  cmpTbody.innerHTML = "";
+
+  results.forEach(r => {
+    const icon     = MODEL_ICONS[r.model] || { cls: "icon-svm", label: r.model.slice(0,2) };
+    const color    = COLOR[r.label] || "#6366f1";
+    const pct      = Math.round(r.confidence * 100);
+    const isTop    = r.model === finalDecision.top_model;
+
+    const probRows = Object.entries(r.probabilities)
+      .map(([cls, p]) => {
+        const w = Math.round(p * 100);
+        return `
+          <div class="prob-mini-row">
+            <span class="prob-mini-label">${cls}</span>
+            <div class="prob-mini-track">
+              <div class="prob-mini-fill" style="width:${w}%; background:${COLOR[cls] || '#6366f1'};"></div>
+            </div>
+            <span class="prob-mini-val">${(p * 100).toFixed(0)}%</span>
+          </div>`;
+      }).join("");
+
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>
+        <div class="model-cell">
+          <div class="model-icon ${icon.cls}">${icon.label}</div>
+          <span>${r.model}</span>
+          ${isTop ? '<span class="crown" title="Highest confidence">👑</span>' : ''}
+        </div>
+      </td>
+      <td>
+        <span class="pred-badge pred-${r.label}">
+          <span class="pred-dot-${r.label}" style="
+            width:7px; height:7px; border-radius:50%;
+            background:${color}; display:inline-block; flex-shrink:0;">
+          </span>
+          ${r.label}
+        </span>
+      </td>
+      <td class="conf-cell">
+        <div class="conf-row">
+          <div class="conf-track">
+            <div class="conf-fill" style="width:${pct}%; background:${color};"></div>
+          </div>
+          <span class="conf-num" style="color:${color};">${pct}%</span>
+        </div>
+      </td>
+      <td><div class="prob-mini">${probRows}</div></td>
+    `;
+    cmpTbody.appendChild(row);
+  });
+}
+
+// ── Final decision card ───────────────────────────────────────────────
+function renderFinalDecision(fd) {
+  const label   = fd.label;
+  const color   = COLOR[label] || "#6366f1";
+
+  // verdict badge
+  finalBadge.textContent = label;
+  finalBadge.className   = `verdict-badge verdict-${label}`;
+
+  // accent bar colour
+  finalAccent.style.background = color;
+
+  // agreement badge
+  const agreeMap = {
+    full:    { cls: "agree-full",    text: "✓ Full Agreement" },
+    partial: { cls: "agree-partial", text: "⚡ Majority Vote" },
+    split:   { cls: "agree-split",   text: "⚖ Split Vote" },
+  };
+  const ag = agreeMap[fd.agreement] || agreeMap.partial;
+  agreeEl.textContent = ag.text;
+  agreeEl.className   = `agreement-badge ${ag.cls}`;
+
+  // vote pills
+  votePillsEl.innerHTML = "";
+  for (const [lbl, cnt] of Object.entries(fd.vote_counts)) {
+    const pill = document.createElement("div");
+    pill.className   = "vote-pill";
+    pill.style.borderColor = COLOR[lbl] || "#6366f1";
+    pill.style.color       = COLOR[lbl] || "#6366f1";
+    pill.textContent = `${lbl}: ${cnt} vote${cnt !== 1 ? "s" : ""}`;
+    votePillsEl.appendChild(pill);
+  }
+
+  // reason
+  finalReasonEl.innerHTML = `<strong>Reason:</strong> ${fd.reason}`;
+}
+
+// ── Feature grid ──────────────────────────────────────────────────────
+function renderFeatures(features) {
+  featGrid.innerHTML = "";
+  for (const [key, val] of Object.entries(features)) {
+    const label = FEATURE_LABELS[key] || key;
+    const disp  = Number.isInteger(val) ? val : parseFloat(val).toFixed(4);
+    const el    = document.createElement("div");
+    el.className = "feat-item";
+    el.innerHTML = `<span class="feat-name">${label}</span>
+                    <span class="feat-val">${disp}</span>`;
+    featGrid.appendChild(el);
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────
+function setLoading(on) {
+  predictBtn.disabled       = on;
+  btnText.textContent       = on ? "Analysing…" : "Analyse (All Models)";
+  btnSpinner.style.display  = on ? "inline-block" : "none";
+  btnIcon.style.display     = on ? "none"         : "inline";
+}
+
+function showError(msg) {
+  errorMsg.innerHTML       = `<strong>Error:</strong> ${msg}`;
+  errorMsg.style.display   = "block";
+  errorMsg.scrollIntoView({ behavior: "smooth" });
+}
+
+function hideError() {
+  errorMsg.style.display = "none";
+  errorMsg.innerHTML     = "";
+}
+</script>
+</body>
+</html>

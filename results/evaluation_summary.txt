@@ -1,0 +1,15 @@
+======================================================================
+  EVALUATION SUMMARY — Quality Classification of AI-Generated Code
+======================================================================
+  Test set size : 107 samples
+  Classes       : ['Bad', 'Good', 'Moderate']
+
+  Model             Test Acc    F1 Mac   ROC-AUC    CV Acc   ± Std
+  ---------------------------------------------------------------
+  SVM                 0.9720    0.9353    0.9990    0.9820  0.0147
+  kNN                 0.9065    0.7560    0.9492    0.8778  0.0183
+  Random Forest       0.8972    0.7829    0.9770    0.8838  0.0306
+  ===============================================================
+  Best model (test accuracy): SVM  (0.9720)
+
+  Plots saved in /results/

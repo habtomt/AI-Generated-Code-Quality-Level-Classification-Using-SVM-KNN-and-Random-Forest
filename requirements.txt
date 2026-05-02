@@ -1,0 +1,26 @@
+# =============================================================================
+# requirements.txt
+# Project: Quality Level Classification of AI-Generated Code
+# =============================================================================
+# Install: pip install -r requirements.txt
+# Python : >= 3.10
+
+# ── Core data science ─────────────────────────────────────────────────────────
+numpy>=1.24.0
+pandas>=2.0.0
+scikit-learn>=1.3.0
+
+# ── Static analysis ───────────────────────────────────────────────────────────
+radon>=6.0.1
+
+# ── Visualisation ─────────────────────────────────────────────────────────────
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# ── API ───────────────────────────────────────────────────────────────────────
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6     # for file uploads via FastAPI
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+pydantic>=2.0.0

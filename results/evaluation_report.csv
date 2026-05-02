@@ -1,0 +1,4 @@
+model,test_accuracy,precision_macro,recall_macro,f1_macro,precision_weighted,recall_weighted,f1_weighted,roc_auc_macro,cv_mean_accuracy,cv_std_accuracy
+SVM,0.972,0.9375,0.9333,0.9353,0.9718,0.972,0.9718,0.999,0.982,0.0147
+kNN,0.9065,0.9263,0.7187,0.756,0.9112,0.9065,0.8954,0.9492,0.8778,0.0183
+Random Forest,0.8972,0.8399,0.756,0.7829,0.8954,0.8972,0.8929,0.977,0.8838,0.0306
