@@ -110,7 +110,7 @@ Python 3.11 · scikit-learn (≥ 1.3) · Radon (≥ 6.0) · `ast` (standard libr
 
 ## Getting Started
 
-> **TODO:** replace the commands, image name, and paths below with the ones used in this repo.
+> replace the commands, image name, and paths below with the ones used in this repo.
 
 ```bash
 # Clone the repository
@@ -135,7 +135,7 @@ Then open `http://localhost:8000` in your browser.
 
 ```bash
 pip install -r requirements.txt
-uvicorn app.main:app --reload   # TODO: adjust module path
+uvicorn app.main:app --reload   # adjust module path
 ```
 
 ### Example API call
